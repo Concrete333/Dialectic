@@ -107,6 +107,8 @@ You only need to install the agent CLIs you actually want to use. Starting with 
 
 ## Supported Agents
 
+Dialectic works with multiple coding-agent CLIs, and it can also route stages to OpenAI-compatible HTTP providers.
+
 | Agent | Install / docs | Auth / setup | Dialectic override |
 | --- | --- | --- | --- |
 | Claude Code | [Anthropic setup docs](https://docs.anthropic.com/en/docs/claude-code/getting-started) | Run `claude`, then follow the Anthropic / Claude login flow | `DIALECTIC_CLAUDE_PATH` |
@@ -116,7 +118,9 @@ You only need to install the agent CLIs you actually want to use. Starting with 
 | Qwen Code | [Qwen Code docs](https://qwenlm.github.io/qwen-code-docs/en/users/overview/) | Run `qwen`, then complete the Qwen OAuth / account setup | `DIALECTIC_QWEN_JS` |
 | OpenCode | [OpenCode docs](https://opencode.ai/docs/) | Run `opencode`, then use `/connect` or `opencode auth login` to configure a provider | `DIALECTIC_OPENCODE_PATH` |
 
-Any OpenAI-compatible HTTP endpoint (local inference servers, internal deployments, or hosted providers) can also be registered as a provider. HTTP providers are always read-only — they can plan, review, and synthesize, but they cannot be the implementer.
+Any OpenAI-compatible HTTP endpoint can also be registered as a provider, whether that is a local inference server, an internal deployment, or a hosted service.
+
+HTTP providers are always **read-only** in Dialectic today. They can plan, review, and synthesize, but they cannot be the implementer.
 
 ## Quick Start
 
@@ -145,6 +149,14 @@ Task written. Starting run...
 
 If you answer `n` to `Run now?`, Dialectic writes `shared/task.json` and prints the command to run it later.
 
+A good first run is not “use every model.” It is:
+
+one strong planner
+one implementer
+one different reviewer
+
+That is usually enough to feel why the workflow matters.
+
 ## Modes
 
 | Mode | Flow | Primary loop setting |
@@ -154,13 +166,47 @@ If you answer `n` to `Run now?`, Dialectic writes `shared/task.json` and prints 
 | `review` | initial review -> parallel reviews -> synthesis | (single pass by design) |
 | `one-shot` | plan -> per-unit implement/review -> replan | `qualityLoops` + `implementLoopsPerUnit` |
 
-For `qualityLoops = 3`, one-shot becomes:
+For example, one-shot with `qualityLoops = 3` becomes:
 
 ```text
 plan -> implement -> review -> plan -> implement -> review -> plan -> implement
 ```
 
-Different agents can own plan, implement, and review seats via `settings.oneShotOrigins`, and a separate `roles.fallback` agent can be designated if a primary provider is unavailable.
+The important point is not just that Dialectic has different modes. It is that each mode exposes a different kind of refinement loop, and you decide how much quality pressure and token spend a task deserves.
+
+You can also assign different agents to different seats in the workflow. In `one-shot`, for example, `settings.oneShotOrigins` lets one agent own planning, another own implementation, and another own review. A separate `roles.fallback` target can be used if a primary provider fails.
+
+## A Practical Cost / Quality Pattern
+
+One of the simplest useful Dialectic patterns looks like this:
+
+- use your smartest and most expensive model to plan
+- use a cheaper or free coding agent to implement
+- use another model to review and challenge the result
+- repeat the review/repair cycle until the task is good enough
+
+That is the point of Dialectic's loop system.
+
+Instead of forcing every stage through one model at one price point, you can place expensive intelligence where judgment matters most, cheaper execution where it is sufficient, and structured critique where quality needs pressure.
+
+## Why The Loop Controls Matter
+
+Dialectic exposes three separate loop controls because different tasks need different kinds of refinement:
+
+| Setting | Used by | What it controls |
+| --- | --- | --- |
+| `qualityLoops` | `plan`, `one-shot` | outer quality cycles |
+| `implementLoops` | `implement`, `one-shot` | implement -> review -> repair cycles |
+| `implementLoopsPerUnit` | `one-shot` | per-unit implement/review/repair cycles |
+
+That means you can do things like:
+
+- loop the plan multiple times before implementation starts
+- keep implementation cheap but review-heavy
+- run more repair cycles only when a task is broken into units
+- increase quality pressure without paying for your most expensive model at every stage
+
+These loops are explicit and inspectable. Every pass writes artifacts, records which agent ran which stage, and leaves behind a workflow you can review and rerun later.
 
 ## Licensing
 
