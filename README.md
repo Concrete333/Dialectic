@@ -1,12 +1,61 @@
 # Dialectic
 
-A Windows-first orchestration layer that lets multiple AI coding agents collaborate in structured plan, review, implement, and one-shot loops instead of isolated one-off prompts.
+Dialectic is the source-available core for structured AI coding workflows.
+
+It helps teams run plan, review, implement, and one-shot loops across multiple coding agents and OpenAI-compatible providers with explicit handoffs, controlled write access, and traceable artifacts.
+
+Most AI coding tools are strong at single-agent execution inside one interface. Dialectic focuses on the layer above that: repeatable multi-step workflows, adversarial review, provider choice, and operational control.
+
+## Why It Exists
+
+When teams move beyond one agent and one chat thread, the hard problems are no longer just prompting. They are workflow structure, review discipline, context control, fallback behavior, and traceability.
+
+Dialectic gives you:
+
+- Explicit plan, implement, review, and repair stages instead of one long prompt thread.
+- Multi-agent and multi-provider workflows with controlled write access.
+- Structured artifacts and handoffs you can inspect instead of relying on chat history alone.
+- Context delivery and fallback controls you can tune for cost, reliability, and review quality.
+
+## Who It's For
+
+- Developers who already use more than one coding agent or model.
+- Agencies and platform teams that want repeatable coding workflows instead of prompt-by-prompt improvisation.
+- Local-first teams that need explicit control over write access, context delivery, and provider routing.
+
+## Source-Available Core
+
+This repository is the source-available runtime: local CLI orchestration, structured artifacts, configurable provider routing, and context-aware plan/review/implement loops inside your repo.
+
+Shared governance, approvals, dashboards, analytics, and other organization-level controls are the natural Team / Enterprise layer on top of this core, but they are not fully shipped in this repository today.
+
+## Licensing
+
+Dialectic BridgeAI is licensed under the Business Source License 1.1 (`BUSL-1.1`).
+
+- Non-production use is permitted, including evaluation, development, testing, research, and personal or other non-commercial experimentation.
+- No additional production rights are granted under this repository license.
+- If you need production use, obtain a separate commercial license from the Licensor.
+- On `2029-04-21`, this version converts to the Apache License, Version 2.0.
+
+See [LICENSE](./LICENSE) for the full terms.
+
+## Why Not Just Use Cursor, Codex, Or Copilot Alone?
+
+Those tools are excellent at single-agent execution. Dialectic is for teams that want a workflow around the model, not just access to the model.
+
+- Mix CLI agents and OpenAI-compatible providers in the same workflow.
+- Control which step can write and which steps stay read-only.
+- Keep workflow state in structured artifacts instead of ephemeral chat context.
+- Tune context delivery and fallback behavior instead of accepting one default runtime model.
 
 ## What It Does
 
-Dialectic coordinates supported terminal agents and OpenAI-compatible HTTP providers through explicit multi-step flows. It writes a normal `shared/task.json`, validates it, runs the orchestrator, and stores human-readable output in `shared/scratchpad.txt` plus structured runtime artifacts under `shared/tasks/`.
+Dialectic coordinates supported terminal agents and OpenAI-compatible HTTP providers through explicit multi-step flows. The primary interface is the CLI: you choose a mode, select agents, and run the workflow from guided commands instead of editing config files by hand.
 
-The goal is a repo you can clone, configure, and use without editing source code. If you want the easiest path in, use the CLI wizard instead of hand-writing JSON.
+Under the hood, Dialectic validates the current task configuration, runs the orchestrator, and stores human-readable output in `shared/scratchpad.txt` plus structured runtime artifacts under `shared/tasks/`.
+
+The goal is a repo you can clone, configure, and use without editing source code. Manual `shared/task.json` editing is available, but it is secondary.
 
 ## Requirements
 
@@ -36,7 +85,7 @@ You only need to install the agent CLIs you actually want to use. Starting with 
 | Qwen Code | [Qwen Code docs](https://qwenlm.github.io/qwen-code-docs/en/users/overview/) | Run `qwen`, then complete the Qwen OAuth / account setup | `DIALECTIC_QWEN_JS` |
 | OpenCode | [OpenCode docs](https://opencode.ai/docs/) | Run `opencode`, then use `/connect` or `opencode auth login` to configure a provider | `DIALECTIC_OPENCODE_PATH` |
 
-## First Run
+## CLI Quick Start
 
 After you install at least one agent CLI, validate your setup:
 
@@ -65,7 +114,7 @@ If you answer `n` to `Run now?`, Dialectic writes `shared/task.json` and prints 
 
 ## Troubleshooting
 
-- Run `npm run cli -- doctor` first. It validates `shared/task.json` and checks that the selected CLI agents appear usable.
+- Run `npm run cli -- doctor` first. It validates the current task configuration and checks that the selected CLI agents appear usable.
 - If an agent is installed but not detected, set the matching `DIALECTIC_*` override:
   - `DIALECTIC_CLAUDE_PATH`
   - `DIALECTIC_CODEX_JS`
@@ -93,9 +142,11 @@ For `qualityLoops = 3`, one-shot becomes:
 
 `plan -> implement -> review -> plan -> implement -> review -> plan -> implement`
 
-## Task File
+## Manual JSON Configuration (Optional)
 
-If you prefer manual configuration, you can still edit `shared/task.json` directly before running:
+Most users should stay in the CLI flow.
+
+If you prefer manual configuration, or want to inspect and tweak the generated config directly, you can still edit `shared/task.json` before running:
 
 ```json
 {
@@ -419,15 +470,11 @@ Smaller local models may not reliably emit the structured handoff JSON block. Pa
 
 ## CLI Usage
 
-```bash
-npm start
-```
-
-This runs the current `shared/task.json` directly. That manual JSON flow still works, but there is now a beginner-friendly CLI wrapper for common tasks.
+The CLI is the primary way to use Dialectic.
 
 ### Beginner CLI
 
-Use the wrapper CLI when you do not want to edit JSON by hand:
+Use the wrapper CLI when you want the normal Dialectic workflow without editing JSON by hand:
 
 ```bash
 npm run cli -- help
@@ -485,6 +532,16 @@ Recommended starter workflow:
 4. Save a setup you like with `npm run cli -- preset save my-plan`.
 5. Re-run the current task later with `npm run cli -- run`.
 
+### Direct Task-File Execution
+
+If you intentionally want the manual task-file flow, you can still run the current `shared/task.json` directly:
+
+```bash
+npm start
+```
+
+That path is supported, but it is the advanced/manual path rather than the recommended starting point.
+
 ## Files
 
 - `src/orchestrator.js`: main orchestration loop
@@ -498,7 +555,7 @@ Recommended starter workflow:
 - `src/handoff.js`: structured handoff extraction, fallback, and review-history compaction
 - `src/prompts.js`: plan, review, and synthesis prompts
 - `src/task-config.js`: config normalization and validation
-- `shared/task.json`: current task configuration (edit before running)
+- `shared/task.json`: current task configuration used by the CLI and manual runs
 - `shared/task.example.json`: example task config with all options
 - `shared/presets/`: saved reusable task configurations for the CLI wrapper
 - `shared/scratchpad.txt`: generated at runtime — human-readable run transcript
