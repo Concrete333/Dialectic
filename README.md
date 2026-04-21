@@ -1,35 +1,43 @@
 # Dialectic
 
-Dialectic makes AI coding agents challenge each other in structured, controllable workflows.
+Dialectic makes AI coding agents challenge each other on purpose.
 
-Instead of pushing every step through one model, Dialectic lets you assign different agents to planning, implementation, and review, then control how many times the workflow loops. That gives you two things a single-agent tool cannot: better results from different model perspectives, and direct control over how much compute and token spend each stage gets.
+Instead of trusting one model to plan, implement, review, and reinforce its own blind spots, Dialectic lets you assign different agents to different stages, control how many times the workflow loops, and decide exactly what reference material the workflow reasons against.
 
-Dialectic is a source-available orchestration runtime for teams that want AI coding workflows to be **inspectable, replayable, and tunable** instead of opaque.
+The result is simple:
 
-## Why Teams Use Dialectic
+- better output from models that disagree usefully
+- tighter control over cost, token spend, and refinement depth
+- workflows you can inspect, replay, and tune instead of opaque chat sessions
 
-### 1. Different agents critique each other
+Dialectic is a source-available orchestration runtime for teams that want AI coding workflows to behave like systems, not improvisations.
 
-A single coding agent has one training history, one alignment profile, one set of defaults, and one set of blind spots. When it reviews its own output, it tends to agree with itself.
+## Why Teams Get Excited About Dialectic
+
+### 1. Make models disagree on purpose
+
+A single coding agent has one training history, one alignment profile, one set of defaults, and one set of blind spots. When it reviews its own output, it often agrees with itself.
 
 Dialectic is built around structured disagreement.
 
 A plan written by one agent can be reviewed by another. An implementation produced by one model can be challenged by a different reviewer. A synthesis step then reconciles the disagreements into a final decision instead of letting one model dominate the whole workflow.
 
-This matters because different agents fail differently. That is the point.
+This is the point: different models fail differently.
 
 With Dialectic, you can:
 
-- use one agent to plan, another to implement, and another to review
+- plan with one model, implement with another, and review with a third
 - run parallel reviews so you can see where agents agree and where they conflict
 - force stage-to-stage handoffs through structured artifacts instead of loose chat memory
 - keep reviewers read-only while the chosen implementer is allowed to write
 
-Dialectic is not multi-agent for novelty. It is multi-agent so different models can expose each other's blind spots.
+Dialectic is not multi-agent for novelty. It is multi-agent so different models can expose each other's blind spots before those blind spots become your problem.
 
-### 2. You control the cost, roles, and refinement loops
+### 2. Put expensive intelligence where it matters
 
-Most AI tools hide retries, refinement, and model choice inside one runtime. Dialectic puts those decisions in your hands.
+Most AI tools force you into one runtime, one model path, and one hidden retry strategy.
+
+Dialectic gives you control over the quality/cost frontier.
 
 You choose:
 
@@ -39,32 +47,32 @@ You choose:
 - which steps stay read-only
 - how many times the workflow loops
 
-That means you can spend expensive tokens where judgment matters most, use cheaper or free models where execution is good enough, and still improve quality through structured review and repair cycles.
+That means you can use your smartest and most expensive model where judgment matters most, use cheaper or free models where execution is good enough, and still improve quality through structured review and repair cycles.
 
-A common pattern looks like this:
+A powerful default pattern looks like this:
 
 - use your smartest model to plan
 - use a cheaper or free coding agent to implement
-- use a different model to review and challenge the result
+- use another model to review and challenge the result
 - repeat the loop until the output is good enough
 
-This gives you direct control over the quality/cost tradeoff instead of forcing every stage through one model at one price point.
+Instead of paying premium prices for every stage, you can concentrate spend where it creates the most leverage.
 
 Dialectic exposes three independent loop controls:
 
 | Setting | Used by | What it controls |
 | --- | --- | --- |
-| `qualityLoops` | `plan`, `one-shot` | Outer quality cycles |
-| `implementLoops` | `implement`, `one-shot` | Implement -> review -> repair cycles |
-| `implementLoopsPerUnit` | `one-shot` | Per-unit implement/review/repair cycles |
+| `qualityLoops` | `plan`, `one-shot` | outer quality cycles |
+| `implementLoops` | `implement`, `one-shot` | implement -> review -> repair cycles |
+| `implementLoopsPerUnit` | `one-shot` | per-unit implement/review/repair cycles |
 
 These loops are explicit, inspectable, and tunable per task. Every pass writes artifacts, records which agent ran which stage, and makes the workflow's behavior visible.
 
-### 3. Bring your own working context
+### 3. Bring your own evidence
 
 Most AI tools work from whatever is already in the repo, whatever fits in the prompt, or whatever happens to be in the current chat.
 
-Dialectic lets you attach an explicit `context` folder to a task so the workflow has reference material to reason against during planning, implementation, and review.
+Dialectic lets you attach an explicit `context` folder to a task so the workflow has real reference material to reason against during planning, implementation, and review.
 
 That context can include things like:
 
@@ -77,7 +85,7 @@ That context can include things like:
 - review rubrics
 - supporting project files
 
-This matters because better workflows need better reference material.
+This matters because better workflows need better evidence.
 
 Instead of hoping one model remembers the right details, you can point Dialectic at the exact body of material that should shape the work. That gives you control over not just which agents run and how many times they loop, but what source material they reason against.
 
@@ -97,13 +105,13 @@ Dialectic is not trying to replace the individual agent tools. It is the workflo
 
 ## What Dialectic Actually Gives You
 
-- Explicit plan, implement, review, and repair stages instead of one long prompt thread
-- Multi-agent and multi-provider workflows with controlled write access
-- Structured artifacts and handoffs you can inspect instead of relying on chat history alone
-- Cost-aware model assignment across stages
-- Independent loop counts for outer quality cycles, implement/repair cycles, and per-unit one-shot cycles
-- Controlled reference context through a task-level `context` folder
-- Context and fallback controls you can tune for cost, reliability, and review quality
+- explicit plan, implement, review, and repair stages instead of one long prompt thread
+- multi-agent and multi-provider workflows with controlled write access
+- structured artifacts and handoffs you can inspect instead of relying on chat history alone
+- cost-aware model assignment across stages
+- independent loop counts for outer quality cycles, implement/repair cycles, and per-unit one-shot cycles
+- controlled reference context through a task-level `context` folder
+- context and fallback controls you can tune for cost, reliability, and review quality
 
 ## Who It Is For
 
@@ -199,20 +207,20 @@ The important point is not just that Dialectic has different modes. It is that e
 
 You can also assign different agents to different seats in the workflow. In `one-shot`, for example, `settings.oneShotOrigins` lets one agent own planning, another own implementation, and another own review. A separate `roles.fallback` target can be used if a primary provider fails.
 
-## A Practical Cost / Quality Pattern
+## The Dialectic Pattern
 
-One of the simplest useful Dialectic patterns looks like this:
+One of the simplest useful Dialectic patterns is also one of the most powerful:
 
 - use your smartest and most expensive model to plan
 - use a cheaper or free coding agent to implement
 - use another model to review and challenge the result
 - repeat the review/repair cycle until the task is good enough
 
-That is the point of Dialectic's loop system.
+That is the leverage Dialectic gives you.
 
-Instead of forcing every stage through one model at one price point, you can place expensive intelligence where judgment matters most, cheaper execution where it is sufficient, and structured critique where quality needs pressure.
+You do not need to pay top-tier rates for every token in the workflow. You can place expensive intelligence where judgment matters most, cheaper execution where it is sufficient, and structured critique where quality needs pressure.
 
-## Why The Loop Controls Matter
+## Why Explicit Loops Matter
 
 Dialectic exposes three separate loop controls because different tasks need different kinds of refinement:
 
