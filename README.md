@@ -1,37 +1,92 @@
 # Dialectic
 
-Dialectic is a source-available orchestration runtime for structured AI coding workflows.
+Dialectic makes AI coding agents challenge each other in structured, controllable workflows.
 
-It helps teams run plan, implement, review, and one-shot loops across multiple coding-agent CLIs and OpenAI-compatible providers with explicit handoffs, controlled write access, and traceable artifacts.
+Instead of pushing every step through one model, Dialectic lets you assign different agents to planning, implementation, and review, then control how many times the workflow loops. That gives you two things a single-agent tool cannot: better results from different model perspectives, and direct control over how much compute and token spend each stage gets.
 
-## What It Looks Like
+Dialectic is a source-available orchestration runtime for teams that want AI coding workflows to be **inspectable, replayable, and tunable** instead of opaque.
 
-One common Dialectic workflow is:
+## Why Teams Use Dialectic
+
+### 1. Different agents critique each other
+
+A single coding agent has one training history, one alignment profile, one set of defaults, and one set of blind spots. When it reviews its own output, it tends to agree with itself.
+
+Dialectic is built around structured disagreement.
+
+A plan written by one agent can be reviewed by another. An implementation produced by one model can be challenged by a different reviewer. A synthesis step then reconciles the disagreements into a final decision instead of letting one model dominate the whole workflow.
+
+This matters because different agents fail differently. That is the point.
+
+With Dialectic, you can:
+
+- use one agent to plan, another to implement, and another to review
+- run parallel reviews so you can see where agents agree and where they conflict
+- force stage-to-stage handoffs through structured artifacts instead of loose chat memory
+- keep reviewers read-only while the chosen implementer is allowed to write
+
+Dialectic is not multi-agent for novelty. It is multi-agent so different models can expose each other's blind spots.
+
+### 2. You control the cost, roles, and refinement loops
+
+Most AI tools hide retries, refinement, and model choice inside one runtime. Dialectic puts those decisions in your hands.
+
+You choose:
+
+- which model plans
+- which model writes
+- which model reviews
+- which steps stay read-only
+- how many times the workflow loops
+
+That means you can spend expensive tokens where judgment matters most, use cheaper or free models where execution is good enough, and still improve quality through structured review and repair cycles.
+
+A common pattern looks like this:
+
+- use your smartest model to plan
+- use a cheaper or free coding agent to implement
+- use a different model to review and challenge the result
+- repeat the loop until the output is good enough
+
+This gives you direct control over the quality/cost tradeoff instead of forcing every stage through one model at one price point.
+
+Dialectic exposes three independent loop controls:
+
+| Setting | Used by | What it controls |
+| --- | --- | --- |
+| `qualityLoops` | `plan`, `one-shot` | Outer quality cycles |
+| `implementLoops` | `implement`, `one-shot` | Implement -> review -> repair cycles |
+| `implementLoopsPerUnit` | `one-shot` | Per-unit implement/review/repair cycles |
+
+These loops are explicit, inspectable, and tunable per task. Every pass writes artifacts, records which agent ran which stage, and makes the workflow's behavior visible.
+
+## What A Typical Run Looks Like
+
+One practical Dialectic workflow looks like this:
 
 1. Plan with Claude
-2. Implement with Codex
-3. Review with Gemini
-4. Save the human-readable scratchpad plus structured per-run artifacts
-5. Re-run later with different fallback, provider, or context rules
+2. Implement with Codex or OpenCode
+3. Review with Gemini or another model
+4. Repeat the implement -> review -> repair cycle until the result is strong enough
+5. Save the scratchpad and structured per-run artifacts
+6. Re-run later with different agents, loop counts, fallback rules, or provider assignments
 
 Dialectic is not trying to replace the individual agent tools. It is the workflow layer above them.
 
-## Why It Exists
-
-When teams move beyond one agent and one chat thread, the hard problems are no longer just prompting. They are workflow structure, review discipline, context control, fallback behavior, and traceability.
-
-Dialectic gives you:
+## What Dialectic Actually Gives You
 
 - Explicit plan, implement, review, and repair stages instead of one long prompt thread
 - Multi-agent and multi-provider workflows with controlled write access
 - Structured artifacts and handoffs you can inspect instead of relying on chat history alone
-- Context delivery and fallback controls you can tune for cost, reliability, and review quality
+- Cost-aware model assignment across stages
+- Independent loop counts for outer quality cycles, implement/repair cycles, and per-unit one-shot cycles
+- Context and fallback controls you can tune for cost, reliability, and review quality
 
 ## Who It Is For
 
 - Developers who already use more than one coding agent or model
 - Agencies and platform teams that want repeatable coding workflows instead of prompt-by-prompt improvisation
-- Local-first teams that need explicit control over write access, context delivery, and provider routing
+- Local-first teams that need explicit control over write access, context delivery, provider routing, and cost
 
 ## Requirements
 
@@ -48,7 +103,7 @@ cd Dialectic
 npm install
 ```
 
-You only need to install the agent CLIs you actually want to use. Starting with one is completely fine.
+You only need to install the agent CLIs you actually want to use. Starting with one is fine, but Dialectic becomes more valuable as soon as you run different agents against each other.
 
 ## Supported Agents
 
@@ -60,6 +115,8 @@ You only need to install the agent CLIs you actually want to use. Starting with 
 | Kilo Code CLI | [Kilo Code CLI](https://kilocode.ai/cli) | Run `kilo auth login` and configure the provider you want to use | `DIALECTIC_KILO_PATH` |
 | Qwen Code | [Qwen Code docs](https://qwenlm.github.io/qwen-code-docs/en/users/overview/) | Run `qwen`, then complete the Qwen OAuth / account setup | `DIALECTIC_QWEN_JS` |
 | OpenCode | [OpenCode docs](https://opencode.ai/docs/) | Run `opencode`, then use `/connect` or `opencode auth login` to configure a provider | `DIALECTIC_OPENCODE_PATH` |
+
+Any OpenAI-compatible HTTP endpoint (local inference servers, internal deployments, or hosted providers) can also be registered as a provider. HTTP providers are always read-only — they can plan, review, and synthesize, but they cannot be the implementer.
 
 ## Quick Start
 
@@ -81,7 +138,7 @@ Typical flow:
 What do you want the agents to do: Plan a small calculator app
 Supported agents: 1) claude, 2) codex, 3) gemini, 4) kilo, 5) qwen, 6) opencode
 Enter agent names or numbers separated by commas.
-Which agents should help: 1
+Which agents should help: 1,3
 Run now? [Y/n]: y
 Task written. Starting run...
 ```
@@ -90,16 +147,20 @@ If you answer `n` to `Run now?`, Dialectic writes `shared/task.json` and prints 
 
 ## Modes
 
-Dialectic currently supports:
-
-- `plan`: initial plan -> review(s) -> synthesis
-- `implement`: implement -> review(s) -> repair
-- `review`: initial review -> parallel reviews -> synthesis
-- `one-shot`: plan -> per-unit implement/review -> replan until the requested loop count is exhausted
+| Mode | Flow | Primary loop setting |
+| --- | --- | --- |
+| `plan` | initial plan -> review(s) -> synthesis | `qualityLoops` |
+| `implement` | implement -> review(s) -> repair | `implementLoops` |
+| `review` | initial review -> parallel reviews -> synthesis | (single pass by design) |
+| `one-shot` | plan -> per-unit implement/review -> replan | `qualityLoops` + `implementLoopsPerUnit` |
 
 For `qualityLoops = 3`, one-shot becomes:
 
-`plan -> implement -> review -> plan -> implement -> review -> plan -> implement`
+```text
+plan -> implement -> review -> plan -> implement -> review -> plan -> implement
+```
+
+Different agents can own plan, implement, and review seats via `settings.oneShotOrigins`, and a separate `roles.fallback` agent can be designated if a primary provider is unavailable.
 
 ## Licensing
 
@@ -131,9 +192,11 @@ The README is intentionally the front door. For deeper configuration and runtime
 
 ## Why Not Just Use Cursor, Codex, Or Copilot Alone?
 
-Those tools are excellent at single-agent execution. Dialectic is for teams that want a workflow around the model, not just access to the model.
+Those tools are excellent at single-agent execution. Dialectic is for workflows where a single agent's blind spots are not acceptable.
 
+- Route plan, implement, and review to agents trained by different organizations on different data, so a single model's failure mode does not become the workflow's failure mode
+- Run implement → review → repair for as many cycles as the task needs, with a different reviewer each pass
 - Mix CLI agents and OpenAI-compatible providers in the same workflow
 - Control which step can write and which steps stay read-only
 - Keep workflow state in structured artifacts instead of ephemeral chat context
-- Tune context delivery and fallback behavior instead of accepting one default runtime model
+- Tune context delivery, fallback behavior, and loop counts per task instead of accepting one default runtime model
