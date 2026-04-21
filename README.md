@@ -60,16 +60,38 @@ Dialectic exposes three independent loop controls:
 
 These loops are explicit, inspectable, and tunable per task. Every pass writes artifacts, records which agent ran which stage, and makes the workflow's behavior visible.
 
+### 3. Bring your own working context
+
+Most AI tools work from whatever is already in the repo, whatever fits in the prompt, or whatever happens to be in the current chat.
+
+Dialectic lets you attach an explicit `context` folder to a task so the workflow has reference material to reason against during planning, implementation, and review.
+
+That context can include things like:
+
+- design docs
+- research notes
+- example code
+- schemas
+- specifications
+- contracts or policy documents
+- review rubrics
+- supporting project files
+
+This matters because better workflows need better reference material.
+
+Instead of hoping one model remembers the right details, you can point Dialectic at the exact body of material that should shape the work. That gives you control over not just which agents run and how many times they loop, but what source material they reason against.
+
 ## What A Typical Run Looks Like
 
 One practical Dialectic workflow looks like this:
 
-1. Plan with Claude
-2. Implement with Codex or OpenCode
-3. Review with Gemini or another model
-4. Repeat the implement -> review -> repair cycle until the result is strong enough
-5. Save the scratchpad and structured per-run artifacts
-6. Re-run later with different agents, loop counts, fallback rules, or provider assignments
+1. Attach a `context` folder with the docs, examples, schemas, specs, or other reference material that matters
+2. Plan with Claude
+3. Implement with Codex or OpenCode
+4. Review with Gemini or another model
+5. Repeat the implement -> review -> repair cycle until the result is strong enough
+6. Save the scratchpad and structured per-run artifacts
+7. Re-run later with different agents, loop counts, fallback rules, provider assignments, or context rules
 
 Dialectic is not trying to replace the individual agent tools. It is the workflow layer above them.
 
@@ -80,6 +102,7 @@ Dialectic is not trying to replace the individual agent tools. It is the workflo
 - Structured artifacts and handoffs you can inspect instead of relying on chat history alone
 - Cost-aware model assignment across stages
 - Independent loop counts for outer quality cycles, implement/repair cycles, and per-unit one-shot cycles
+- Controlled reference context through a task-level `context` folder
 - Context and fallback controls you can tune for cost, reliability, and review quality
 
 ## Who It Is For
@@ -151,9 +174,9 @@ If you answer `n` to `Run now?`, Dialectic writes `shared/task.json` and prints 
 
 A good first run is not “use every model.” It is:
 
-one strong planner
-one implementer
-one different reviewer
+- one strong planner
+- one implementer
+- one different reviewer
 
 That is usually enough to feel why the workflow matters.
 
@@ -242,6 +265,7 @@ Those tools are excellent at single-agent execution. Dialectic is for workflows 
 
 - Route plan, implement, and review to agents trained by different organizations on different data, so a single model's failure mode does not become the workflow's failure mode
 - Run implement → review → repair for as many cycles as the task needs, with a different reviewer each pass
+- Give the workflow an explicit body of reference material through the `context` folder instead of relying only on repo state or chat history
 - Mix CLI agents and OpenAI-compatible providers in the same workflow
 - Control which step can write and which steps stay read-only
 - Keep workflow state in structured artifacts instead of ephemeral chat context
