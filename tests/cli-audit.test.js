@@ -289,25 +289,77 @@ test('selectSnapshotForFork accepts metadata-only pre-step snapshots', () => {
   assert.strictEqual(snapshot.data.stepId, 'implement-2');
 });
 
-test('selectSnapshotForFork accepts clean exact-step snapshots without head, patch, or dirty metadata', () => {
-  const snapshot = __test.selectSnapshotForFork([
-    {
+test('selectSnapshotForFork rejects exact-step snapshots without usable head, patch, or dirty metadata', () => {
+  assert.throws(
+    () => __test.selectSnapshotForFork([
+      {
+        data: {
+          scope: 'pre-step',
+          stepId: 'implement-2',
+          gitHead: null,
+          patchFile: null,
+          stagedPatchFile: null,
+          dirty: false,
+          statusPorcelain: [],
+          changedFiles: [],
+          untrackedFiles: []
+        }
+      }
+    ], 'run-clean-empty', 'implement-2'),
+    /does not contain a usable worktree snapshot for step "implement-2"/
+  );
+});
+
+test('createForkTaskFromRun rejects exact-step snapshots that persisted but are still unusable', async () => {
+  const projectRoot = makeTempDir();
+  try {
+    const store = new CollaborationStore({ projectRoot });
+    const runId = 'run-unusable-step';
+
+    await store.writeTask(runId, {
+      mode: 'implement',
+      prompt: 'Retry the work.',
+      agents: ['codex'],
+      startedAt: new Date().toISOString(),
+      status: 'completed'
+    });
+
+    await store.writeArtifact(runId, {
+      id: 'worktree-snapshot-1',
+      type: 'worktree-snapshot',
+      taskId: runId,
+      createdAt: new Date().toISOString(),
       data: {
         scope: 'pre-step',
         stepId: 'implement-2',
+        stage: 'implement',
+        agent: 'codex',
+        canWrite: true,
+        gitAvailable: false,
         gitHead: null,
+        gitHeadShort: null,
+        statusPorcelain: [],
+        changedFiles: [],
+        untrackedFiles: [],
         patchFile: null,
         stagedPatchFile: null,
         dirty: false,
-        statusPorcelain: [],
-        changedFiles: [],
-        untrackedFiles: []
+        captureError: 'git unavailable'
       }
-    }
-  ], 'run-clean-empty', 'implement-2');
+    });
 
-  assert.strictEqual(snapshot.data.scope, 'pre-step');
-  assert.strictEqual(snapshot.data.stepId, 'implement-2');
+    await assert.rejects(
+      () => createForkTaskFromRun({
+        projectRoot,
+        sourceRunId: runId,
+        sourceStepId: 'implement-2',
+        reason: 'Need an exact usable step base'
+      }),
+      /does not contain a usable worktree snapshot for step "implement-2"/
+    );
+  } finally {
+    removeDir(projectRoot);
+  }
 });
 
 setTimeout(() => {

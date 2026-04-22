@@ -2480,11 +2480,7 @@ class LoopiOrchestrator {
       if (step.usedFallback && step.capabilityDowngrades && step.capabilityDowngrades.length > 0) {
         lines.push(`Fallback Downgrades: ${step.capabilityDowngrades.join(', ')}`);
       }
-      if (step.worktreeBeforeSnapshot) {
-        lines.push(`Worktree Before Snapshot: ${step.worktreeBeforeSnapshot.artifactId}`);
-      }
       if (step.worktreeAfterSnapshot) {
-        lines.push(`Worktree After Snapshot: ${step.worktreeAfterSnapshot.artifactId}`);
         if (step.worktreeAfterSnapshot.patchFile) {
           lines.push(`Worktree After Patch: ${step.worktreeAfterSnapshot.patchFile}`);
         }

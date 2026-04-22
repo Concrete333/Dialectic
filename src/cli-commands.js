@@ -222,7 +222,11 @@ function parseForkArgs(args) {
 
     if (arg === '--reason') {
       const nextValue = args[i + 1];
-      if (typeof nextValue !== 'string' || nextValue.trim() === '') {
+      if (
+        typeof nextValue !== 'string'
+        || nextValue.trim() === ''
+        || nextValue.trim().startsWith('-')
+      ) {
         throw new Error(usage);
       }
       reason = nextValue.trim();

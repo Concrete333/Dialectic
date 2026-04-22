@@ -516,8 +516,8 @@ module.exports = async function registerArtifactTests(test) {
       assert.match(scratchpadText, /Stage: implement/);
       assert.match(scratchpadText, /Agent: nim-local/);
       assert.match(scratchpadText, /Cycle: 2/);
-      assert.match(scratchpadText, /Worktree Before Snapshot: worktree-snapshot-/);
-      assert.match(scratchpadText, /Worktree After Snapshot: worktree-snapshot-/);
+      assert.doesNotMatch(scratchpadText, /Worktree Before Snapshot:/);
+      assert.doesNotMatch(scratchpadText, /Worktree After Snapshot:/);
       assert.doesNotMatch(scratchpadText, /Worktree Before Patch:/);
       assert.match(scratchpadText, /Worktree After Patch: patches\/worktree-snapshot-/);
       for (const artifact of snapshotArtifacts) {

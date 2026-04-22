@@ -152,7 +152,11 @@ function selectSnapshotForFork(artifacts, sourceRunId, sourceStepId = null) {
   const stepSnapshots = safeArtifacts
     .filter((artifact) => artifact && artifact.data && artifact.data.stepId === sourceStepId);
 
-  const exactStepSnapshot = findLatestSnapshotByScopes(stepSnapshots, ['post-step', 'pre-step']);
+  const exactStepSnapshot = findLatestSnapshotByScopes(
+    stepSnapshots,
+    ['post-step', 'pre-step'],
+    isUsableSnapshot
+  );
   if (exactStepSnapshot) {
     return exactStepSnapshot;
   }

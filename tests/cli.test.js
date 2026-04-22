@@ -305,6 +305,21 @@ test('fork command rejects extra positional arguments', async () => {
   assert.match(stderr.read(), /Usage: npm run cli -- fork <runId>/);
 });
 
+test('fork command rejects flag-shaped --reason values', async () => {
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  const exitCode = await runCli(['fork', 'run-001', '--reason', '--run'], {
+    projectRoot: PROJECT_ROOT,
+    stdout,
+    stderr
+  });
+
+  assert.strictEqual(exitCode, 1);
+  assert.strictEqual(stdout.read(), '');
+  assert.match(stderr.read(), /Usage: npm run cli -- fork <runId>/);
+});
+
 test('compare command delegates to compare helper and prints the returned lines', async () => {
   const stdout = createCaptureStream();
   const stderr = createCaptureStream();
@@ -873,6 +888,13 @@ test('doctor helper reports when only HTTP providers need no CLI preflight', asy
       },
       executionTargets: ['local-http']
     }),
+    checkProviders: async () => ({
+      'local-http': {
+        ready: true,
+        error: null,
+        failureReason: null
+      }
+    }),
     resolveCliAgents: async () => {
       throw new Error('resolveCliAgents should not run when only HTTP providers are selected.');
     }
@@ -880,6 +902,99 @@ test('doctor helper reports when only HTTP providers need no CLI preflight', asy
 
   assert.strictEqual(result.ok, true);
   assert.ok(result.lines.some((line) => line.includes('only configured HTTP providers')));
+});
+
+test('doctor helper fails when a provider-only task has an unready HTTP provider', async () => {
+  const { runDoctorCheck } = require('../src/cli-doctor');
+
+  const result = await runDoctorCheck({
+    projectRoot: PROJECT_ROOT,
+    readFile: async () => JSON.stringify({
+      mode: 'review',
+      prompt: 'Review this safely',
+      agents: ['claude']
+    }),
+    normalizeConfig: () => ({
+      mode: 'review',
+      agents: ['claude'],
+      context: null,
+      settings: {
+        cwd: PROJECT_ROOT,
+        timeoutMs: 1000
+      },
+      providers: {
+        'local-http': {
+          type: 'openai-compatible',
+          baseUrl: 'http://localhost:8000/v1',
+          apiKey: 'dummy',
+          model: 'missing-model'
+        }
+      },
+      executionTargets: ['local-http']
+    }),
+    checkProviders: async () => ({
+      'local-http': {
+        ready: false,
+        error: 'model not found',
+        failureReason: 'model_not_found'
+      }
+    }),
+    resolveCliAgents: async () => {
+      throw new Error('resolveCliAgents should not run when only HTTP providers are selected.');
+    }
+  });
+
+  assert.strictEqual(result.ok, false);
+  assert.ok(result.lines.some((line) => line.includes('Provider "local-http": model not found')));
+  assert.ok(result.lines.some((line) => line.includes('at least one provider is not ready')));
+});
+
+test('doctor helper fails mixed target tasks when any configured HTTP provider is unready', async () => {
+  const { runDoctorCheck } = require('../src/cli-doctor');
+  let cliChecked = false;
+
+  const result = await runDoctorCheck({
+    projectRoot: PROJECT_ROOT,
+    readFile: async () => JSON.stringify({
+      mode: 'review',
+      prompt: 'Review this safely',
+      agents: ['claude']
+    }),
+    normalizeConfig: () => ({
+      mode: 'review',
+      agents: ['claude'],
+      context: null,
+      settings: {
+        cwd: PROJECT_ROOT,
+        timeoutMs: 1000
+      },
+      providers: {
+        'local-http': {
+          type: 'openai-compatible',
+          baseUrl: 'http://localhost:8000/v1',
+          apiKey: 'dummy',
+          model: 'missing-model'
+        }
+      },
+      executionTargets: ['local-http', 'claude']
+    }),
+    checkProviders: async () => ({
+      'local-http': {
+        ready: false,
+        error: 'model not found',
+        failureReason: 'model_not_found'
+      }
+    }),
+    resolveCliAgents: async (agents) => {
+      cliChecked = true;
+      assert.deepStrictEqual(agents, ['claude']);
+    }
+  });
+
+  assert.strictEqual(cliChecked, true);
+  assert.strictEqual(result.ok, false);
+  assert.ok(result.lines.some((line) => line.includes('Provider "local-http": model not found')));
+  assert.ok(result.lines.some((line) => line.includes('One or more configured HTTP providers are not ready')));
 });
 
 test('resolveWizardMode maps oneshot command to one-shot config mode', async () => {
