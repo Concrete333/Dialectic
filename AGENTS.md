@@ -13,7 +13,7 @@ It coordinates multiple coding-agent CLIs and OpenAI-compatible HTTP providers t
 - `review`
 - `one-shot`
 
-The main user-facing workflow is CLI-first. Users are expected to start with the wrapper CLI, not by editing JSON manually.
+The main user-facing workflow is wrapper-CLI-first, with a local browser UI available for setup, task editing, context preparation, and run monitoring.
 
 ## How users normally use it
 
@@ -22,7 +22,15 @@ The normal path is:
 1. Run `npm run cli -- doctor`
 2. Run `npm run cli -- plan` / `review` / `implement` / `oneshot`
 3. Follow the interactive prompts
-4. Review results in `shared/scratchpad.txt`
+4. If the task uses `context`, run `npm run cli -- context prepare` once before the first run
+5. Run the task and review results in `shared/scratchpad.txt`
+
+The browser UI is also a first-class path:
+
+1. Run `npm run ui`
+2. Use Setup and Settings to configure agents/providers and edit the task
+3. Prepare context in Settings when `context` is configured
+4. Launch and monitor the run from the UI
 
 `shared/task.json` exists as the current task file used by the CLI and runtime, but it is a secondary/manual path rather than the primary interface.
 
@@ -38,6 +46,7 @@ It adds:
 - controlled write access
 - traceable run artifacts
 - context selection and delivery controls
+- explicit prepared-context reuse through `.loopi-context/`
 
 ## Key files
 
@@ -49,6 +58,9 @@ It adds:
 | `src/cli-wizard.js` | Interactive wizard flow |
 | `src/cli-presets.js` | Saved preset helpers |
 | `src/cli-doctor.js` | Setup and task health checks |
+| `src/context-index.js` | Context preparation, prepared-cache consumption, and readiness checks |
+| `src/control-plane/index.js` | Local app service logic, including context status/prepare and run launch gating |
+| `src/control-plane/server.js` | HTTP server for the local browser UI |
 | `src/adapters/index.js` | CLI agent and HTTP provider execution |
 | `src/task-config.js` | Config normalization and validation |
 | `src/prompts.js` | Prompt construction for workflow stages |
@@ -68,6 +80,11 @@ Loopi writes runtime state to:
 - `shared/tasks/<runId>/patches/*.patch`
 
 These files matter when understanding what happened in a run.
+
+If a task uses `context`, there is also a generated cache under the configured context root:
+
+- `.loopi-context/manifest.json`
+- `.loopi-context/normalized/*`
 
 Important audit-trail note:
 
@@ -104,10 +121,12 @@ If you need to understand the project quickly, start here:
 1. `README.md`
 2. `src/cli.js`
 3. `src/cli-commands.js`
-4. `src/orchestrator.js`
-5. `src/task-config.js`
-6. `src/adapters/index.js`
-7. `src/handoff.js`
+4. `src/task-config.js`
+5. `src/context-index.js`
+6. `src/control-plane/index.js`
+7. `src/orchestrator.js`
+8. `src/adapters/index.js`
+9. `src/handoff.js`
 
 ## What this file is not
 

@@ -236,16 +236,16 @@ In the app, the intended flow is the same:
 3. click Prepare context
 4. run once the cache is ready
 
-The app should tell you whether context is:
+The app will tell you whether context is:
 
 - not configured
 - missing
 - config-mismatched
-- stale
+- drifted
 - ready
 - ready with warnings
 
-If you try to run while context is missing or stale, the app should block the launch before creating a live run session and point you back to the Prepare context action.
+If you try to run while context is missing or drifted, the app blocks launch before creating a live run session and points you back to the Prepare context action.
 
 ## When You Need To Prepare Again
 

@@ -325,8 +325,8 @@ In `one-shot` mode, the loop controls nest as follows:
 ```
 
 If the plan has 3 sections, this configuration means:
-- `8` total plan cycles (4 plan loops × 2 quality loops)
-- `12` total section implementation cycles (3 sections × 2 section loops × 2 quality loops)
+- `8` total plan cycles (4 plan loops x 2 quality loops)
+- `12` total section implementation cycles (3 sections x 2 section loops x 2 quality loops)
 
 That means you can do things like:
 
