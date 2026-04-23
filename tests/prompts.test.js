@@ -496,6 +496,7 @@ test('Context digest entries are deterministic and use shallow metadata', () => 
     {
       relativePath: 'review/rubric.md',
       reason: 'phase match + priority(2)',
+      displayPath: 'review/rubric.md',
       purpose: 'Review checklist',
       note: '# Rubric',
       truncated: true
@@ -666,6 +667,48 @@ test('Digest context rendering without renderMaxChars keeps all entries', () => 
   assert.ok(prompt.includes('context/shared/first.md'));
   assert.ok(prompt.includes('context/shared/second.md'));
   assert.ok(!prompt.includes('additional context file(s) omitted to respect digest render budget'));
+});
+
+test('Chunked context uses unique relativePath keys but renders original source paths', () => {
+  const contextPack = {
+    renderMode: 'digest',
+    files: [
+      {
+        relativePath: 'shared/packet.pdf#chunk-001',
+        displayPath: 'shared/packet.pdf',
+        sourceRelativePath: 'shared/packet.pdf',
+        phase: 'shared',
+        purpose: 'Course packet',
+        content: '# Packet\nChunk content.\n',
+        truncated: false,
+        isChunk: true,
+        chunkOrdinal: 1,
+        chunkCount: 3,
+        sectionLabel: 'Assessment Details'
+      }
+    ],
+    selectionReasons: [
+      {
+        relativePath: 'shared/packet.pdf#chunk-001',
+        reason: 'shared context + priority(4)'
+      }
+    ]
+  };
+
+  const digestPrompt = buildPlanPrompt('Test request', { contextPack });
+  assert.ok(digestPrompt.includes('context/shared/packet.pdf [chunk 1/3] - Assessment Details'));
+  assert.ok(!digestPrompt.includes('context/shared/packet.pdf#chunk-001'));
+  assert.ok(!digestPrompt.includes('chunk: 1/3'));
+  assert.ok(!digestPrompt.includes('section: Assessment Details'));
+
+  const fullPrompt = buildPlanPrompt('Test request', {
+    contextPack: {
+      ...contextPack,
+      renderMode: 'full'
+    }
+  });
+  assert.ok(fullPrompt.includes('--- context/shared/packet.pdf [chunk 1/3] - Assessment Details ---'));
+  assert.ok(!fullPrompt.includes('--- context/shared/packet.pdf#chunk-001 ---'));
 });
 
 test('Existing prompt structure and handoff guidance are unaffected', () => {

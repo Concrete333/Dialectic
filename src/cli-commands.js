@@ -1,6 +1,8 @@
 const fs = require('fs').promises;
 const taskPaths = require('./task-paths');
 const { LoopiOrchestrator } = require('./orchestrator');
+const { normalizeTaskConfig } = require('./task-config');
+const { prepareContextIndex } = require('./context-index');
 const { runBeginnerWizard, runAdvancedWizard } = require('./cli-wizard');
 const { listPresets, savePreset, usePreset } = require('./cli-presets');
 const { runDoctorCheck } = require('./cli-doctor');
@@ -29,6 +31,7 @@ function buildHelpText() {
     '  npm run cli -- preset <save|list|use> [name]',
     '  npm run cli -- fork <runId> [stepId] [--reason "text"] [--run]',
     '  npm run cli -- compare <runIdA> <runIdB>',
+    '  npm run cli -- context prepare',
     '',
     'Setup:',
     '  doctor      Check the environment and current task',
@@ -45,6 +48,7 @@ function buildHelpText() {
     'Run and inspect:',
     '  run         Run the current shared/task.json through Loopi',
     '  open        Show the scratchpad path and print its contents if present',
+    '  context     Prepare reusable context cache assets for the current task',
     '',
     'Manage prior work:',
     '  preset      Save, list, or use named task presets',
@@ -133,6 +137,31 @@ async function runCurrentTask({
   await orchestrator.init();
   await orchestrator.runTask();
   return 0;
+}
+
+async function loadNormalizedTaskConfig({
+  projectRoot,
+  readFile = fs.readFile
+}) {
+  const taskFile = taskPaths.legacyTaskFile(projectRoot);
+  let rawTask;
+  try {
+    rawTask = await readFile(taskFile, 'utf8');
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      throw new Error(`No task file at ${taskFile}.`);
+    }
+    throw error;
+  }
+
+  let parsedTask;
+  try {
+    parsedTask = JSON.parse(rawTask);
+  } catch (error) {
+    throw new Error(`Task file at ${taskFile} is not valid JSON: ${error.message}`);
+  }
+
+  return normalizeTaskConfig(parsedTask, { projectRoot });
 }
 
 async function runWizardCommand(command, {
@@ -444,6 +473,55 @@ async function runCompareCommand(args, {
   return 0;
 }
 
+async function runContextCommand(args, {
+  projectRoot,
+  stdout,
+  stderr,
+  readFile = fs.readFile,
+  prepareContext = prepareContextIndex
+}) {
+  const action = args[0] ? String(args[0]).trim().toLowerCase() : '';
+  if (!action || action === 'help') {
+    writeLine(stderr, 'Usage: npm run cli -- context prepare');
+    return 1;
+  }
+
+  if (action !== 'prepare') {
+    writeLine(stderr, `Unknown context action "${action}".`);
+    writeLine(stderr, 'Usage: npm run cli -- context prepare');
+    return 1;
+  }
+
+  let config;
+  try {
+    config = await loadNormalizedTaskConfig({ projectRoot, readFile });
+  } catch (error) {
+    writeLine(stderr, error.message);
+    writeLine(stderr, '- If this is your first run: `npm run cli -- doctor` to check your setup.');
+    writeLine(stderr, '- Then: `npm run cli -- plan` (or `review`, `implement`, `oneshot`) to write one.');
+    return 1;
+  }
+
+  if (!config.context) {
+    writeLine(stderr, 'The current task does not configure a context root.');
+    writeLine(stderr, 'Add a "context" object to shared/task.json, then rerun `npm run cli -- context prepare`.');
+    return 1;
+  }
+
+  const result = await prepareContext(config.context, projectRoot);
+  const stats = result.manifest && result.manifest.stats ? result.manifest.stats : {};
+
+  writeLine(stdout, `Prepared context cache: ${result.cacheDir}`);
+  writeLine(stdout, `Context root: ${result.rootDir}`);
+  writeLine(stdout, `Built at: ${new Date(result.builtAt).toISOString()}`);
+  writeLine(
+    stdout,
+    `Sources: total=${stats.total || 0}, rebuilt=${stats.rebuilt || 0}, reused=${stats.reused || 0}, skipped=${stats.skipped || 0}`
+  );
+  writeLine(stdout, 'Runs will now reuse this prepared context until you change the context inputs.');
+  return 0;
+}
+
 async function runCommand(command, {
   projectRoot = taskPaths.getProjectRoot(),
   stdout = process.stdout,
@@ -463,7 +541,8 @@ async function runCommand(command, {
   createForkTask = createForkTaskFromRun,
   compareRunsHelper = compareRuns,
   installHelper = runAdapterInstall,
-  loginHelper = runAdapterLogin
+  loginHelper = runAdapterLogin,
+  prepareContext = prepareContextIndex
 } = {}) {
   const normalizedCommand = typeof command === 'string' && command.trim() !== ''
     ? command.trim().toLowerCase()
@@ -487,6 +566,16 @@ async function runCommand(command, {
 
   if (normalizedCommand === 'open') {
     return openScratchpad({ projectRoot, stdout, readFile });
+  }
+
+  if (normalizedCommand === 'context') {
+    return runContextCommand(args, {
+      projectRoot,
+      stdout,
+      stderr,
+      readFile,
+      prepareContext
+    });
   }
 
   if (normalizedCommand === 'preset') {

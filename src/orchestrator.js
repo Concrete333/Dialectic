@@ -27,7 +27,7 @@ const { normalizeTaskConfig } = require('./task-config');
 const { CollaborationStore } = require('./collaboration-store');
 const { serializeTaskConfigForArtifact } = require('./cli-audit');
 const { buildContextIndex } = require('./context-index');
-const { selectContextForPhase } = require('./context-selection');
+const { selectContextForPhase, collectSkippedSourceDiagnostics } = require('./context-selection');
 const { collectPlanAnswers, normalizeClarifications } = require('./plan-questions');
 const { acquireLock, releaseLock } = require('./run-lock');
 const { captureWorktreeSnapshot } = require('./worktree-audit');
@@ -247,8 +247,14 @@ function buildContextSelectionArtifact({
       effectiveMaxChars: contextPack && Number.isInteger(contextPack.effectiveMaxChars)
         ? contextPack.effectiveMaxChars
         : null,
+      skippedSourceCount: contextPack && Number.isInteger(contextPack.skippedSourceCount)
+        ? contextPack.skippedSourceCount
+        : 0,
       selectedFiles: Array.isArray(contextPack?.files)
         ? contextPack.files.map((file) => file.relativePath)
+        : [],
+      skippedSources: Array.isArray(contextPack?.skippedSources)
+        ? contextPack.skippedSources
         : [],
       selectionReasons: Array.isArray(contextPack?.selectionReasons)
         ? contextPack.selectionReasons
@@ -266,10 +272,13 @@ function describeContextDelivery({
 }) {
   const fileCount = Array.isArray(contextPack?.files) ? contextPack.files.length : 0;
   const chars = delivery === 'none' ? 0 : measureContextSectionChars(contextPack);
+  const skippedSourceCount = Number.isInteger(contextPack?.skippedSourceCount)
+    ? contextPack.skippedSourceCount
+    : (Array.isArray(contextPack?.skippedSources) ? contextPack.skippedSources.length : 0);
   const downgradeNote = downgradedFrom && cycleNumber != null
     ? ` (cycle ${cycleNumber} downgrade from ${downgradedFrom})`
     : '';
-  return `[context] stage=${stageKey} delivery=${delivery} files=${fileCount} chars=${chars}${downgradeNote}`;
+  return `[context] stage=${stageKey} delivery=${delivery} files=${fileCount} chars=${chars} skippedSources=${skippedSourceCount}${downgradeNote}`;
 }
 
 function buildPlanClarificationsArtifact({ runId, artifactId, cycleNumber, clarifications }) {
@@ -768,15 +777,21 @@ class LoopiOrchestrator {
       effectiveProviderMaxInputChars || 'default'
     ].join('::');
 
+    // Cache the in-flight promise rather than the resolved value so two
+    // concurrent calls for the same selection key share one selection pass.
     if (!this._contextPackCache[selectionCacheKey]) {
-      this._contextPackCache[selectionCacheKey] = selectContextForPhase(this._contextIndex, phase, {
-        maxFiles,
-        maxChars,
-        providerMaxInputChars: effectiveProviderMaxInputChars
-      });
+      this._contextPackCache[selectionCacheKey] = selectContextForPhase(
+        this._contextIndex,
+        phase,
+        {
+          maxFiles,
+          maxChars,
+          providerMaxInputChars: effectiveProviderMaxInputChars
+        }
+      );
     }
 
-    const contextPack = this._contextPackCache[selectionCacheKey];
+    const contextPack = await this._contextPackCache[selectionCacheKey];
 
     await this.writeContextSelectionArtifact({
       config,
@@ -805,6 +820,7 @@ class LoopiOrchestrator {
     }
 
     if (delivery === 'none') {
+      const skippedSources = collectSkippedSourceDiagnostics(this._contextIndex.files);
       await this.writeContextSelectionArtifact({
         config,
         phase,
@@ -815,7 +831,9 @@ class LoopiOrchestrator {
         contextPack: {
           files: [],
           selectionReasons: [],
-          effectiveMaxChars: null
+          effectiveMaxChars: null,
+          skippedSourceCount: skippedSources.length,
+          skippedSources
         },
         suppressed: true
       });

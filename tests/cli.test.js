@@ -216,8 +216,82 @@ test('help text includes the beginner wizard commands', async () => {
   assert.match(stdout.read(), /oneshot\s+Interactive one-shot wizard/);
   assert.match(stdout.read(), /fork\s+Create a forked shared\/task\.json from a prior run/);
   assert.match(stdout.read(), /compare\s+Compare two prior runs using recorded snapshots/);
+  assert.match(stdout.read(), /context\s+Prepare reusable context cache assets for the current task/);
   assert.match(stdout.read(), /doctor\s+Check the environment and current task/);
   assert.match(stdout.read(), /new\s+Start the opt-in advanced wizard/);
+});
+
+test('context prepare delegates to context preparation helper and prints summary', async () => {
+  const projectRoot = createTempProject('loopi-cli-context-');
+  const sharedDir = path.join(projectRoot, 'shared');
+  fs.mkdirSync(sharedDir, { recursive: true });
+  fs.writeFileSync(path.join(sharedDir, 'task.json'), JSON.stringify({
+    mode: 'plan',
+    prompt: 'Prepare context',
+    agents: ['claude'],
+    context: {
+      dir: '.',
+      include: ['**/*.md']
+    }
+  }, null, 2));
+
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+  const calls = [];
+
+  const exitCode = await runCli(['context', 'prepare'], {
+    projectRoot,
+    stdout,
+    stderr,
+    prepareContext: async (contextConfig, root) => {
+      calls.push({ contextConfig, root });
+      return {
+        rootDir: root,
+        cacheDir: path.join(root, '.loopi-context'),
+        builtAt: Date.parse('2026-04-23T12:00:00.000Z'),
+        manifest: {
+          stats: {
+            total: 4,
+            rebuilt: 2,
+            reused: 1,
+            skipped: 1
+          }
+        }
+      };
+    }
+  });
+
+  assert.strictEqual(exitCode, 0);
+  assert.strictEqual(stderr.read(), '');
+  assert.strictEqual(calls.length, 1);
+  assert.strictEqual(calls[0].root, projectRoot);
+  assert.deepStrictEqual(calls[0].contextConfig.include, ['**/*.md']);
+  assert.match(stdout.read(), /Prepared context cache:/);
+  assert.match(stdout.read(), /Sources: total=4, rebuilt=2, reused=1, skipped=1/);
+});
+
+test('context prepare reports when the current task has no context config', async () => {
+  const projectRoot = createTempProject('loopi-cli-context-missing-');
+  const sharedDir = path.join(projectRoot, 'shared');
+  fs.mkdirSync(sharedDir, { recursive: true });
+  fs.writeFileSync(path.join(sharedDir, 'task.json'), JSON.stringify({
+    mode: 'plan',
+    prompt: 'No context here',
+    agents: ['claude']
+  }, null, 2));
+
+  const stdout = createCaptureStream();
+  const stderr = createCaptureStream();
+
+  const exitCode = await runCli(['context', 'prepare'], {
+    projectRoot,
+    stdout,
+    stderr
+  });
+
+  assert.strictEqual(exitCode, 1);
+  assert.strictEqual(stdout.read(), '');
+  assert.match(stderr.read(), /does not configure a context root/);
 });
 
 test('fork command delegates to fork helper and prints run hint', async () => {

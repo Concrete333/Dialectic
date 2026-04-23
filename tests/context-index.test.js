@@ -1,7 +1,7 @@
 const assert = require('assert');
 const fs = require('fs').promises;
 const path = require('path');
-const { buildContextIndex } = require('../src/context-index');
+const { buildContextIndex, prepareContextIndex } = require('../src/context-index');
 
 let passed = 0;
 let failed = 0;
@@ -78,6 +78,7 @@ console.log('context-index: buildContextIndex');
         exclude: []
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
       assert.ok(index.rootDir);
       assert.ok(Array.isArray(index.files));
@@ -99,6 +100,7 @@ console.log('context-index: buildContextIndex');
         exclude: []
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
       const fileMap = Object.fromEntries(index.files.map(f => [f.relativePath, f.phase]));
 
@@ -118,6 +120,7 @@ console.log('context-index: buildContextIndex');
         exclude: ['**/node_modules/**', '**/.git/**']
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
       const fileNames = index.files.map(f => f.relativePath);
 
@@ -132,6 +135,7 @@ console.log('context-index: buildContextIndex');
         exclude: []
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
       const fileNames = index.files.map(f => f.relativePath);
 
@@ -141,23 +145,25 @@ console.log('context-index: buildContextIndex');
       }
     });
 
-    await test('Source-code files matched by broad include patterns are still skipped by the text-file heuristic', async () => {
+    await test('node_modules and .git are excluded from the cache scan', async () => {
       const contextConfig = {
         dir: '.',  // Use relative path from task root
         include: ['**/*'],
         exclude: []
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
-      const sourceEntry = index.files.find(f => f.relativePath === 'node_modules/pkg/index.js');
+      const fileNames = index.files.map(f => f.relativePath);
 
-      assert.ok(sourceEntry);
-      assert.strictEqual(sourceEntry.skipped, true);
-      assert.strictEqual(sourceEntry.skipReason, 'Likely binary file');
-      assert.strictEqual(sourceEntry.content, null);
+      // node_modules and .git are excluded by the cache walker
+      assert.ok(!fileNames.some(f => f.includes('node_modules')),
+        'node_modules files should not appear in cache-built index');
+      assert.ok(!fileNames.some(f => f.includes('.git')),
+        '.git files should not appear in cache-built index');
     });
 
-    await test('Large files are recorded as skipped with metadata', async () => {
+    await test('Large text files are chunked via the cache pipeline', async () => {
       // Create a large file
       const largeFile = path.join(tmpDir, 'shared', 'large.md');
       const largeContent = 'x'.repeat(300 * 1024); // 300KB
@@ -169,13 +175,23 @@ console.log('context-index: buildContextIndex');
         exclude: []
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
-      const largeFileEntry = index.files.find(f => f.relativePath === 'shared/large.md');
+      // With the cache pipeline, a large text file is normalized and chunked
+      const largeFileEntries = index.files.filter(f => f.sourceRelativePath === 'shared/large.md');
 
-      assert.ok(largeFileEntry);
-      assert.strictEqual(largeFileEntry.skipped, true);
-      assert.ok(largeFileEntry.skipReason.includes('too large'));
-      assert.strictEqual(largeFileEntry.content, null);
+      assert.ok(largeFileEntries.length > 0, 'Should have at least one entry for the large file');
+      // The file should be split into multiple chunks
+      assert.ok(largeFileEntries.length > 1, `Expected multiple chunks, got ${largeFileEntries.length}`);
+      assert.strictEqual(new Set(largeFileEntries.map(f => f.relativePath)).size, largeFileEntries.length);
+      for (const entry of largeFileEntries) {
+        assert.strictEqual(entry.skipped, false);
+        assert.strictEqual(entry.isChunk, true);
+        assert.strictEqual(entry.displayPath, 'shared/large.md');
+        assert.strictEqual(entry.content, null);
+        assert.strictEqual(entry.deferredContent, true);
+        assert.ok(entry.relativePath.startsWith('shared/large.md#chunk-'));
+      }
 
       // Clean up
       await fs.unlink(largeFile);
@@ -189,12 +205,52 @@ console.log('context-index: buildContextIndex');
         manifest: 'context.json'
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
       const guidelinesEntry = index.files.find(f => f.relativePath === 'shared/guidelines.md');
 
       assert.ok(guidelinesEntry);
       assert.strictEqual(guidelinesEntry.priority, 5);
       assert.strictEqual(guidelinesEntry.phase, 'shared');
+    });
+
+    await test('Default context.json is not exposed as promptable context', async () => {
+      const contextConfig = {
+        dir: '.',
+        include: ['**/*'],
+        exclude: []
+      };
+
+      await prepareContextIndex(contextConfig, tmpDir);
+      const index = await buildContextIndex(contextConfig, tmpDir);
+      const fileNames = index.files.map(f => f.relativePath);
+
+      assert.ok(!fileNames.includes('context.json'));
+      assert.ok(fileNames.includes('shared/guidelines.md'));
+    });
+
+    await test('Configured manifest inside the context root is excluded from promptable context', async () => {
+      await fs.mkdir(path.join(tmpDir, 'meta'), { recursive: true });
+      await fs.writeFile(
+        path.join(tmpDir, 'meta', 'overrides.json'),
+        JSON.stringify({ 'plan/approach.md': { priority: 11 } }, null, 2)
+      );
+
+      const contextConfig = {
+        dir: '.',
+        include: ['**/*'],
+        exclude: [],
+        manifest: 'meta/overrides.json'
+      };
+
+      await prepareContextIndex(contextConfig, tmpDir);
+      const index = await buildContextIndex(contextConfig, tmpDir);
+      const fileNames = index.files.map(f => f.relativePath);
+      const approachEntry = index.files.find(f => f.relativePath === 'plan/approach.md');
+
+      assert.ok(!fileNames.includes('meta/overrides.json'));
+      assert.ok(approachEntry);
+      assert.strictEqual(approachEntry.priority, 11);
     });
 
     await test('Continues safely when manifest file is absent', async () => {
@@ -205,8 +261,51 @@ console.log('context-index: buildContextIndex');
         manifest: 'nonexistent-manifest.json'
       };
 
+      await prepareContextIndex(contextConfig, tmpDir);
       const index = await buildContextIndex(contextConfig, tmpDir);
       assert.ok(index.files.length > 0);
+    });
+
+    await test('Throws a clear error when the prepared context cache has not been built yet', async () => {
+      const freshDir = await createTempContext();
+      try {
+        const contextConfig = {
+          dir: '.',
+          include: ['**/*.md'],
+          exclude: []
+        };
+
+        try {
+          await buildContextIndex(contextConfig, freshDir);
+          assert.fail('Should have thrown an error');
+        } catch (error) {
+          assert.ok(error.message.includes('Prepared context cache not available'));
+          assert.ok(error.message.includes('npm run cli -- context prepare'));
+        }
+      } finally {
+        await cleanupTempDir(freshDir);
+      }
+    });
+
+    await test('Throws a clear error when the prepared cache no longer matches the current context config', async () => {
+      const preparedConfig = {
+        dir: '.',
+        include: ['**/*.md'],
+        exclude: []
+      };
+      await prepareContextIndex(preparedConfig, tmpDir);
+
+      try {
+        await buildContextIndex({
+          dir: '.',
+          include: ['**/*.json'],
+          exclude: []
+        }, tmpDir);
+        assert.fail('Should have thrown an error');
+      } catch (error) {
+        assert.ok(error.message.includes('Prepared context cache is out of date'));
+        assert.ok(error.message.includes('npm run cli -- context prepare'));
+      }
     });
 
     await test('Throws a clear error when the context directory does not exist', async () => {

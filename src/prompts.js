@@ -93,6 +93,21 @@ function extractContextDigestNote(file) {
   return summarizeContextLine(firstNonEmptyLine || null);
 }
 
+function getContextDisplayPath(entry) {
+  return entry.displayPath || entry.sourceRelativePath || entry.relativePath || entry.phase || '(unknown)';
+}
+
+function buildContextSourceLabel(entry) {
+  const displayPath = getContextDisplayPath(entry);
+  const chunkSuffix = entry.isChunk && entry.chunkCount > 1
+    ? ` [chunk ${entry.chunkOrdinal}/${entry.chunkCount}]`
+    : '';
+  const sectionSuffix = entry.sectionLabel
+    ? ` - ${entry.sectionLabel}`
+    : '';
+  return `${displayPath}${chunkSuffix}${sectionSuffix}`;
+}
+
 function buildContextDigestEntries(contextPack) {
   if (!contextPack || !Array.isArray(contextPack.files) || contextPack.files.length === 0) {
     return [];
@@ -104,17 +119,34 @@ function buildContextDigestEntries(contextPack) {
       : []
   );
 
-  return contextPack.files.map((file) => ({
-    relativePath: file.relativePath || file.phase || '(unknown)',
-    reason: reasonByPath.get(file.relativePath) || null,
-    purpose: file.purpose || null,
-    note: extractContextDigestNote(file),
-    truncated: Boolean(file.truncated)
-  }));
+  return contextPack.files.map((file) => {
+    const entry = {
+      relativePath: file.relativePath || file.phase || '(unknown)',
+      reason: reasonByPath.get(file.relativePath) || null,
+      displayPath: file.displayPath || file.sourceRelativePath || file.relativePath || file.phase || '(unknown)',
+      purpose: file.purpose || null,
+      note: extractContextDigestNote(file),
+      truncated: Boolean(file.truncated)
+    };
+
+    // Carry through cache-enriched chunk metadata
+    if (file.isChunk) {
+      entry.isChunk = true;
+      entry.sourceRelativePath = file.sourceRelativePath || file.relativePath;
+      entry.chunkOrdinal = file.chunkOrdinal;
+      entry.chunkCount = file.chunkCount;
+      entry.sectionLabel = file.sectionLabel || null;
+      entry.sourceType = file.sourceType || null;
+      entry.extractor = file.extractor || null;
+    }
+
+    return entry;
+  });
 }
 
 function buildContextDigestEntryLines(entry) {
-  const lines = [`- context/${entry.relativePath}`];
+  const label = buildContextSourceLabel(entry);
+  const lines = [`- context/${escapeTaggedContent(label)}`];
   if (entry.reason) {
     lines.push(`  reason: ${escapeTaggedContent(entry.reason)}`);
   }
@@ -192,8 +224,8 @@ function appendContextSection(lines, contextPack) {
   lines.push('');
 
   for (const file of contextPack.files) {
-    const relativePath = file.relativePath || file.phase || '(unknown)';
-    lines.push(`--- context/${relativePath} ---`);
+    const label = buildContextSourceLabel(file);
+    lines.push(`--- context/${escapeTaggedContent(label)} ---`);
     lines.push(escapeTaggedContent(file.content));
     if (file.truncated) {
       lines.push('[content truncated at 4000 chars]');

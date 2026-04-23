@@ -669,8 +669,10 @@ module.exports = async function registerArtifactTests(test) {
     assert.strictEqual(contextArtifact.data.maxChars, 20000);
     assert.strictEqual(contextArtifact.data.providerMaxInputChars, null);
     assert.strictEqual(contextArtifact.data.effectiveMaxChars, contextPack.effectiveMaxChars);
+    assert.strictEqual(contextArtifact.data.skippedSourceCount, 0);
+    assert.deepStrictEqual(contextArtifact.data.skippedSources, []);
     assert.deepStrictEqual(logs, [
-      `[orchestrator] [context] stage=planInitial delivery=full files=1 chars=${measureContextSectionChars(contextPack)}`
+      `[orchestrator] [context] stage=planInitial delivery=full files=1 chars=${measureContextSectionChars(contextPack)} skippedSources=0`
     ]);
     assert.ok(Array.isArray(contextArtifact.data.selectionReasons));
     assert.ok(contextArtifact.data.selectionReasons.length > 0);
@@ -880,9 +882,13 @@ module.exports = async function registerArtifactTests(test) {
       contextArtifacts.map((artifact) => artifact.data.effectiveMaxChars),
       [60, 20000]
     );
+    assert.deepStrictEqual(
+      contextArtifacts.map((artifact) => artifact.data.skippedSourceCount),
+      [0, 0]
+    );
     assert.deepStrictEqual(logs, [
-      `[orchestrator] [context] stage=planInitial delivery=full files=1 chars=${measureContextSectionChars(fullContextPack)}`,
-      `[orchestrator] [context] stage=planReview delivery=digest files=1 chars=${measureContextSectionChars(digestContextPack)}`
+      `[orchestrator] [context] stage=planInitial delivery=full files=1 chars=${measureContextSectionChars(fullContextPack)} skippedSources=0`,
+      `[orchestrator] [context] stage=planReview delivery=digest files=1 chars=${measureContextSectionChars(digestContextPack)} skippedSources=0`
     ]);
     for (const artifact of contextArtifacts) {
       const schemaResult = validateArtifactSafe(artifact);
@@ -943,9 +949,85 @@ module.exports = async function registerArtifactTests(test) {
     assert.strictEqual(contextArtifact.data.stageKey, 'reviewInitial');
     assert.strictEqual(contextArtifact.data.delivery, 'none');
     assert.strictEqual(contextArtifact.data.suppressed, true);
+    assert.strictEqual(contextArtifact.data.skippedSourceCount, 0);
     assert.deepStrictEqual(contextArtifact.data.selectedFiles, []);
+    assert.deepStrictEqual(contextArtifact.data.skippedSources, []);
     assert.deepStrictEqual(contextArtifact.data.selectionReasons, []);
-    assert.deepStrictEqual(logs, ['[orchestrator] [context] stage=reviewInitial delivery=none files=0 chars=0']);
+    assert.deepStrictEqual(logs, ['[orchestrator] [context] stage=reviewInitial delivery=none files=0 chars=0 skippedSources=0']);
+    const schemaResult = validateArtifactSafe(contextArtifact);
+    assert.strictEqual(schemaResult.ok, true, schemaResult.error && schemaResult.error.message);
+  });
+
+  await test('Context-selection artifacts surface skipped source diagnostics from the prepared root', async () => {
+    const orchestrator = new LoopiOrchestrator();
+    const artifacts = [];
+    const config = normalizeTaskConfig({
+      mode: 'plan',
+      prompt: 'Test prompt',
+      agents: ['claude'],
+      context: {
+        dir: './context'
+      },
+      settings: { cwd: '.', timeoutMs: 10000, qualityLoops: 1 }
+    }, { projectRoot: PROJECT_ROOT });
+    const run = orchestrator.createRun(config);
+
+    orchestrator._contextIndex = {
+      rootDir: path.join(PROJECT_ROOT, 'context'),
+      builtAt: Date.now(),
+      files: [
+        {
+          relativePath: 'plan/guide.md',
+          phase: 'plan',
+          sizeBytes: 10,
+          content: '# Guide\nBody',
+          skipped: false
+        },
+        {
+          relativePath: 'shared/slides.pptx',
+          phase: 'shared',
+          sizeBytes: 0,
+          content: null,
+          skipped: true,
+          skipReason: 'Unsupported file type: .pptx'
+        }
+      ]
+    };
+    orchestrator.collaborationStore.writeArtifact = async (_taskId, artifact) => {
+      artifacts.push(artifact);
+    };
+    const originalLog = console.log;
+    const logs = [];
+    console.log = (message) => logs.push(message);
+    let contextPack;
+
+    try {
+      contextPack = await orchestrator.getPromptContextForPhase(config, 'plan', {
+        agentName: 'claude',
+        run,
+        delivery: 'full',
+        stageKey: 'planInitial'
+      });
+    } finally {
+      console.log = originalLog;
+    }
+
+    const contextArtifact = artifacts.find((artifact) => artifact.type === 'context-selection');
+    assert.ok(contextArtifact, 'context-selection artifact should be written');
+    assert.strictEqual(contextArtifact.data.skippedSourceCount, 1);
+    assert.deepStrictEqual(contextArtifact.data.skippedSources, [
+      {
+        relativePath: 'shared/slides.pptx',
+        displayPath: 'shared/slides.pptx',
+        phase: 'shared',
+        skipReason: 'Unsupported file type: .pptx',
+        sourceType: null,
+        extractor: null
+      }
+    ]);
+    assert.deepStrictEqual(logs, [
+      `[orchestrator] [context] stage=planInitial delivery=full files=1 chars=${measureContextSectionChars(contextPack)} skippedSources=1`
+    ]);
     const schemaResult = validateArtifactSafe(contextArtifact);
     assert.strictEqual(schemaResult.ok, true, schemaResult.error && schemaResult.error.message);
   });

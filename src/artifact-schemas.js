@@ -244,6 +244,12 @@ function validateContextSelectionData(data) {
   if (!Array.isArray(data.selectedFiles)) {
     throw new Error('context-selection artifact "data.selectedFiles" must be an array.');
   }
+  if (typeof data.skippedSourceCount !== 'number' || data.skippedSourceCount < 0) {
+    throw new Error('context-selection artifact "data.skippedSourceCount" must be a non-negative number.');
+  }
+  if (!Array.isArray(data.skippedSources)) {
+    throw new Error('context-selection artifact "data.skippedSources" must be an array.');
+  }
   if (!Array.isArray(data.selectionReasons)) {
     throw new Error('context-selection artifact "data.selectionReasons" must be an array.');
   }

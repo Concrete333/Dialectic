@@ -103,6 +103,8 @@ That context can include things like:
 - review rubrics
 - supporting project files
 
+Prepared context roots can also include supported source formats such as `pdf`, `docx`, `ipynb`, and common code files like `js`, `ts`, `py`, `html`, and `css`. Loopi normalizes those files into a generated `.loopi-context/` cache automatically, and unsupported formats are skipped rather than silently treated as promptable context.
+
 This matters because better workflows need better evidence.
 
 Instead of hoping one model remembers the right details, you can point Loopi at the exact body of material that should shape the work. That gives you control over not just which models run and how many times they loop, but what source material they reason against.
@@ -205,6 +207,12 @@ Then generate your first task interactively:
 
 ```powershell
 npm run cli -- plan
+```
+
+If your task uses a prepared `context` root, build the reusable context cache once before running:
+
+```powershell
+npm run cli -- context prepare
 ```
 
 If you prefer a browser-based setup flow, launch the local UI:
@@ -394,6 +402,7 @@ See [LICENSE](./LICENSE) for the full license text and [LICENSING.md](./LICENSIN
 ## Troubleshooting
 
 - Run `npm run cli -- doctor` first. Without a task file it performs an environment/setup check; with `shared/task.json` present it also validates the task configuration and selected agents.
+- If your task uses `context`, run `npm run cli -- context prepare` after changing context files, include/exclude patterns, or manifest annotations.
 - If an agent is installed but not detected, set the matching `LOOPI_*` override.
 - To find an installed CLI path on Windows, use `where.exe claude`, `where.exe codex`, `where.exe gemini`, and so on.
 - On macOS or Linux, use `which claude`, `which codex`, `which gemini`, and so on.

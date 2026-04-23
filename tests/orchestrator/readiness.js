@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { validateProviderAssignments, __test } = require('../../src/orchestrator');
+const { prepareContextIndex } = require('../../src/context-index');
 const {
   assert,
   PROJECT_ROOT,
@@ -604,6 +605,7 @@ module.exports = async function registerReadinessTests(test) {
     });
 
     try {
+      await prepareContextIndex(config.context, PROJECT_ROOT);
       await orchestrator.runMode(config, run);
       assert.ok(orchestrator._contextIndex, 'Context index should be built when context is configured');
       assert.strictEqual(orchestrator._contextIndex.rootDir, tempContextDir, 'Context directory should resolve from the project root');
