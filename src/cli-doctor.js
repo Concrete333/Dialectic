@@ -261,12 +261,20 @@ async function runDoctorCheck(options = {}) {
     return runTaskCheck({ projectRoot, ...otherOptions });
   }
 
-  // Auto-detect: check if task file exists
+  // Auto-detect: probe the task file via stat, matching the pattern used in cli-commands.js
+  // for the same "does the task file exist?" question. Accept an injected stat so tests and
+  // sandboxed environments get consistent behavior without double-reading the file contents.
+  const stat = otherOptions.stat || fs.stat;
   try {
-    await fs.access(taskFile);
+    await stat(taskFile);
     return runTaskCheck({ projectRoot, ...otherOptions });
-  } catch {
-    return runEnvironmentCheck({ projectRoot, ...otherOptions });
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return runEnvironmentCheck({ projectRoot, ...otherOptions });
+    }
+    // Anything else (permission error, etc.) should be surfaced by runTaskCheck with its
+    // richer diagnostics rather than falling through to environment mode.
+    return runTaskCheck({ projectRoot, ...otherOptions });
   }
 }
 

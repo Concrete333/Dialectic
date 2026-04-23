@@ -957,6 +957,7 @@ test('doctor helper reports missing task file with a useful hint', async () => {
 
   const result = await runDoctorCheck({
     projectRoot: PROJECT_ROOT,
+    mode: 'task',
     readFile: async () => {
       const error = new Error('missing');
       error.code = 'ENOENT';
@@ -969,11 +970,28 @@ test('doctor helper reports missing task file with a useful hint', async () => {
   assert.ok(result.lines.some((line) => line.includes('npm run cli -- plan')));
 });
 
+test('doctor helper auto-detects environment mode when task file is missing', async () => {
+  const { runDoctorCheck } = require('../src/cli-doctor');
+  const projectRoot = createTempProject('aibridge-doctor-auto-');
+
+  const result = await runDoctorCheck({
+    projectRoot,
+    timeoutMs: 500,
+    // No injected readFile or stat; rely on the real filesystem to observe a missing task file
+    // and confirm auto-detect routes to environment mode instead of task mode.
+  });
+
+  // Environment-mode results have hasReadyAgents; task-mode results have hasTaskFile.
+  assert.strictEqual(typeof result.hasReadyAgents, 'boolean');
+  assert.strictEqual(result.hasTaskFile, undefined);
+});
+
 test('doctor helper validates config and checks CLI agents', async () => {
   const { runDoctorCheck } = require('../src/cli-doctor');
 
   const result = await runDoctorCheck({
     projectRoot: PROJECT_ROOT,
+    mode: 'task',
     readFile: async () => JSON.stringify({
       mode: 'review',
       prompt: 'Review this safely',
@@ -996,6 +1014,7 @@ test('doctor helper reports invalid task JSON plainly', async () => {
 
   const result = await runDoctorCheck({
     projectRoot: PROJECT_ROOT,
+    mode: 'task',
     readFile: async () => '{not json}'
   });
 
@@ -1009,6 +1028,7 @@ test('doctor helper reports when only HTTP providers need no CLI preflight', asy
 
   const result = await runDoctorCheck({
     projectRoot: PROJECT_ROOT,
+    mode: 'task',
     readFile: async () => JSON.stringify({
       mode: 'review',
       prompt: 'Review this safely',
@@ -1053,6 +1073,7 @@ test('doctor helper fails when a provider-only task has an unready HTTP provider
 
   const result = await runDoctorCheck({
     projectRoot: PROJECT_ROOT,
+    mode: 'task',
     readFile: async () => JSON.stringify({
       mode: 'review',
       prompt: 'Review this safely',
@@ -1099,6 +1120,7 @@ test('doctor helper fails mixed target tasks when any configured HTTP provider i
 
   const result = await runDoctorCheck({
     projectRoot: PROJECT_ROOT,
+    mode: 'task',
     readFile: async () => JSON.stringify({
       mode: 'review',
       prompt: 'Review this safely',
@@ -1591,10 +1613,10 @@ test('process-level smoke: advanced wizard accepts real piped stdin and writes a
       'claude',
       'coding',
       '1', // planLoops
-      'n',
-      'n',
-      'n',
-      'n'
+      'n', // reviewPrompt override
+      'n', // synthesisPrompt override
+      'n', // run now
+      'y'  // confirm write
     ]
   });
 
